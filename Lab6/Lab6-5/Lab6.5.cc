@@ -14,15 +14,28 @@ private:
     double TIME_OPERATION_OF_SWITCH;
     bool isChannelBussy;
 
-    queue<int> ENB[4], EXB[4];
+    queue<int> ENB[4], EXB_SW[4]; // enchance buffer và exit buffer của switch
+    queue<int> SQ, EXB_SD; //Source queue và exit buffer của sender
 
-    void sendToExitBuffer();
-    bool checkENB();
-    void sendToReceiver();
-    void sendSignalToSender(int);
+    //wrap function sử dụng cho từng loại thiết bị sender, switch, receiver
     void senders(cMessage *msg);
     void switches(cMessage *msg);
     void receivers(cMessage *msg);
+
+
+    //các hàm sử dụng cho sender
+    void generateMessage();
+    void sendToExitBuffer_SD();
+    void sendToSwitch();
+
+    //các hàm sử dụng cho switch
+    void sendToExitBuffer_SW();
+    bool checkENB();
+    void sendToNextNode();
+    void sendSignalToNeighbor(int);
+
+    //các hàm sử dụng cho receiver
+    void sendSignalToSwitch();
 protected:
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
