@@ -19,8 +19,8 @@ int main(int argc, char* argv[]){
     int numCores = k*k/4;
     int numNodes = numServers + numSwitchs;
     int numEachPod = k * k / 4 + k;
-    fprintf(fptr,"simple Node\n{\n\tparameters:\n\t\t@display(\"i=device/pc\");\n\t\tint type;\n\t\tint des = default(-1);\n\t\tint EXB_SIZE;\n\t\tdouble TIMEOUT;\n\t\tdouble TIME_INTERVAL;\n\t\tdouble CHANNEL_DELAY;\n\t\tdouble CREDIT_DELAY;\n\t\tdouble TIME_GEN_MSG;\n\t\tdouble TIME_OPERATION_OF_SWITCH;\n\tgates:\n\t\tinput in[%d];\n\t\toutput out[%d];\n}\n\n",k,k);
-    fprintf(fptr,"network fattree\n{\n\ttypes:\n\t\t channel Channel extends ned.DelayChannel {\n\t\t\tdelay = 15ms;\n\t\t\tdatarate = 1Gbps;\n\t\t}\n");
+    fprintf(fptr,"simple Nodes\n{\n\tparameters:\n\t\t@display(\"i=device/pc\");\n\t\tint type;\n\t\tint des = default(-1);\n\t\tint EXB_SIZE;\n\t\tdouble TIMEOUT;\n\t\tdouble TIME_INTERVAL;\n\t\tdouble CHANNEL_DELAY;\n\t\tdouble CREDIT_DELAY;\n\t\tdouble TIME_GEN_MSG;\n\t\tdouble TIME_OPERATION_OF_SWITCH;\n\tgates:\n\t\tinput in[%d];\n\t\toutput out[%d];\n}\n\n",k,k);
+    fprintf(fptr,"network fattree\n{\n");
     fprintf(fptr, "\tparameters:\n");
 
     for (int p = 0; p < k; p++) {
@@ -74,19 +74,20 @@ int main(int argc, char* argv[]){
         prehost = nexthost;
     }
 
-    fprintf(fptr,"\tsubmodules:\n\t\tNodes[%d]: Node;\n", numNodes);
+    fprintf(fptr,"\n\ttypes:\n\t\t channel Channel extends ned.DatarateChannel {\n\t\t\tdelay = 15ms;\n\t\t\tdatarate = 1Gbps;\n\t\t}\n");
+    fprintf(fptr,"\tsubmodules:\n\t\tNode[%d]: Nodes;\n", numNodes);
     fprintf(fptr,"\tconnections:\n");
     fprintf(fptr,"\t\tfor p=0..%d, for e=0..%d, for s=0..%d{\n", k-1, k/2-1, k/2-1);
-    fprintf(fptr,"\t\t\tNodes[int(%d*p + e*%d/2 + s)].out++ --> Channel --> Nodes[int(%d*p + %d*%d/4 + e)].in++;\n", numEachPod, k, numEachPod, k, k);
-    fprintf(fptr,"\t\t\tNodes[%d*p + e*%d/2 + s].in++ <-- Channel <-- Nodes[%d*p + %d*%d/4 + e].out++;\n", numEachPod, k, numEachPod, k, k);
+    fprintf(fptr,"\t\t\tNode[int(%d*p + e*%d/2 + s)].out++ --> Channel --> Node[int(%d*p + %d*%d/4 + e)].in++;\n", numEachPod, k, numEachPod, k, k);
+    fprintf(fptr,"\t\t\tNode[%d*p + e*%d/2 + s].in++ <-- Channel <-- Node[%d*p + %d*%d/4 + e].out++;\n", numEachPod, k, numEachPod, k, k);
     fprintf(fptr,"\t\t}\n");
     fprintf(fptr,"\t\tfor p=0..%d, for e=0..%d, for s=%d..%d{\n", k-1, k/2-1, k/2, k-1);
-    fprintf(fptr,"\t\t\tNodes[int(%d*p + %d*%d/4 + e)].out++ --> Channel --> Nodes[int(%d*p + %d*%d/4 + s)].in++;\n", numEachPod, k, k, numEachPod, k, k);
-    fprintf(fptr,"\t\t\tNodes[int(%d*p + %d*%d/4 + e)].in++ <-- Channel <-- Nodes[int(%d*p + %d*%d/4 + s)].out++;\n", numEachPod, k, k, numEachPod, k, k);
+    fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + e)].out++ --> Channel --> Node[int(%d*p + %d*%d/4 + s)].in++;\n", numEachPod, k, k, numEachPod, k, k);
+    fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + e)].in++ <-- Channel <-- Node[int(%d*p + %d*%d/4 + s)].out++;\n", numEachPod, k, k, numEachPod, k, k);
     fprintf(fptr,"\t\t}\n");
     fprintf(fptr,"\t\tfor p=0..%d, for e=0..%d, for s=0..%d{\n", k-1, k/2-1, k/2-1);
-    fprintf(fptr,"\t\t\tNodes[int(%d*p + %d*%d/4 + %d/2 + e)].out++ --> Channel --> Nodes[int(e*%d/4 + s + %d)].in++;\n", numEachPod, k, k, k, k, numPodSwitches + numServers);
-    fprintf(fptr,"\t\t\tNodes[int(%d*p + %d*%d/4 + %d/2 + e)].in++ <-- Channel <-- Nodes[int(e*%d/4 + s + %d)].out++;\n", numEachPod, k, k, k, k, numPodSwitches + numServers);
+    fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + %d/2 + e)].out++ --> Channel --> Node[int(e*%d/4 + s + %d)].in++;\n", numEachPod, k, k, k, k, numPodSwitches + numServers);
+    fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + %d/2 + e)].in++ <-- Channel <-- Node[int(e*%d/4 + s + %d)].out++;\n", numEachPod, k, k, k, k, numPodSwitches + numServers);
     fprintf(fptr,"\t\t}\n}");
     fclose(fptr);
     return 0;
