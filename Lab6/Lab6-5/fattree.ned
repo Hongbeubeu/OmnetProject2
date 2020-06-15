@@ -66,7 +66,7 @@ network fattree
 	connections:
 		for p=0..3, for e=0..1, for s=0..1{
 			Node[int(8*p + e*4/2 + s)].out++ --> Channel --> Node[int(8*p + 4*4/4 + e)].in++;
-			Node[8*p + e*4/2 + s].in++ <-- Channel <-- Node[8*p + 4*4/4 + e].out++;
+			Node[int(8*p + e*4/2 + s)].in++ <-- Channel <-- Node[int(8*p + 4*4/4 + e)].out++;
 		}
 		for p=0..3, for e=0..1, for s=2..3{
 			Node[int(8*p + 4*4/4 + e)].out++ --> Channel --> Node[int(8*p + 4*4/4 + s)].in++;

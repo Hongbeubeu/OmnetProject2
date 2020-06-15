@@ -79,7 +79,7 @@ int main(int argc, char* argv[]){
     fprintf(fptr,"\tconnections:\n");
     fprintf(fptr,"\t\tfor p=0..%d, for e=0..%d, for s=0..%d{\n", k-1, k/2-1, k/2-1);
     fprintf(fptr,"\t\t\tNode[int(%d*p + e*%d/2 + s)].out++ --> Channel --> Node[int(%d*p + %d*%d/4 + e)].in++;\n", numEachPod, k, numEachPod, k, k);
-    fprintf(fptr,"\t\t\tNode[%d*p + e*%d/2 + s].in++ <-- Channel <-- Node[%d*p + %d*%d/4 + e].out++;\n", numEachPod, k, numEachPod, k, k);
+    fprintf(fptr,"\t\t\tNode[int(%d*p + e*%d/2 + s)].in++ <-- Channel <-- Node[int(%d*p + %d*%d/4 + e)].out++;\n", numEachPod, k, numEachPod, k, k);
     fprintf(fptr,"\t\t}\n");
     fprintf(fptr,"\t\tfor p=0..%d, for e=0..%d, for s=%d..%d{\n", k-1, k/2-1, k/2, k-1);
     fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + e)].out++ --> Channel --> Node[int(%d*p + %d*%d/4 + s)].in++;\n", numEachPod, k, k, numEachPod, k, k);
