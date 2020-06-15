@@ -63,7 +63,7 @@ network fattree
 		}
 	submodules:
 		Node[36]: Nodes;
-	connections:
+	connections allowunconnected:
 		for p=0..3, for e=0..1, for s=0..1{
 			Node[int(8*p + e*4/2 + s)].out++ --> Channel --> Node[int(8*p + 4*4/4 + e)].in++;
 			Node[int(8*p + e*4/2 + s)].in++ <-- Channel <-- Node[int(8*p + 4*4/4 + e)].out++;
