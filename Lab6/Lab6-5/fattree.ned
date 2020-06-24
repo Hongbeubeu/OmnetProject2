@@ -39,49 +39,48 @@ network fattree
 		Node[33].type = 2;
 		Node[34].type = 2;
 		Node[35].type = 2;
+		Node[11].type = 1;
+		Node[11].des = 8;
+		Node[8].type = 3;
+		Node[27].type = 1;
+		Node[27].des = 1;
+		Node[1].type = 3;
+		Node[3].type = 1;
+		Node[3].des = 9;
+		Node[9].type = 3;
+		Node[26].type = 1;
+		Node[26].des = 17;
+		Node[17].type = 3;
 		Node[19].type = 1;
 		Node[19].des = 18;
 		Node[18].type = 3;
 		Node[0].type = 1;
-		Node[0].des = 1;
-		Node[1].type = 3;
-		Node[3].type = 1;
-		Node[3].des = 2;
+		Node[0].des = 2;
 		Node[2].type = 3;
-		Node[11].type = 1;
-		Node[11].des = 26;
-		Node[26].type = 3;
-		Node[24].type = 1;
-		Node[24].des = 25;
-		Node[25].type = 3;
-		Node[17].type = 1;
-		Node[17].des = 9;
-		Node[9].type = 3;
 		Node[16].type = 1;
-		Node[16].des = 8;
-		Node[8].type = 3;
-		Node[27].type = 1;
-		Node[27].des = 10;
-		Node[10].type = 3;
+		Node[16].des = 24;
+		Node[24].type = 3;
+		Node[10].type = 1;
+		Node[10].des = 25;
+		Node[25].type = 3;
 
 	types:
 		 channel Channel extends ned.DatarateChannel {
-			delay = 15ms;
 			datarate = 1Gbps;
 		}
 	submodules:
 		Node[36]: Nodes;
-	connections:
+	connections allowunconnected:
 		for p=0..3, for e=0..1, for s=0..1{
 			Node[int(8*p + e*4/2 + s)].out++ --> Channel --> Node[int(8*p + 4*4/4 + e)].in++;
-			Node[8*p + e*4/2 + s].in++ <-- Channel <-- Node[8*p + 4*4/4 + e].out++;
+			Node[int(8*p + e*4/2 + s)].in++ <-- Channel <-- Node[int(8*p + 4*4/4 + e)].out++;
 		}
 		for p=0..3, for e=0..1, for s=2..3{
 			Node[int(8*p + 4*4/4 + e)].out++ --> Channel --> Node[int(8*p + 4*4/4 + s)].in++;
 			Node[int(8*p + 4*4/4 + e)].in++ <-- Channel <-- Node[int(8*p + 4*4/4 + s)].out++;
 		}
 		for p=0..3, for e=0..1, for s=0..1{
-			Node[int(8*p + 4*4/4 + 4/2 + e)].out++ --> Channel --> Node[int(e*4/4 + s + 32)].in++;
-			Node[int(8*p + 4*4/4 + 4/2 + e)].in++ <-- Channel <-- Node[int(e*4/4 + s + 32)].out++;
+			Node[int(8*p + 4*4/4 + 4/2 + e)].out++ --> Channel --> Node[int(e*4/2 + s + 32)].in++;
+			Node[int(8*p + 4*4/4 + 4/2 + e)].in++ <-- Channel <-- Node[int(e*4/2 + s + 32)].out++;
 		}
 }

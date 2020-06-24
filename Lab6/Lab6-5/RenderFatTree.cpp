@@ -75,7 +75,7 @@ int main(int argc, char* argv[]){
         prehost = nexthost;
     }
 
-    fprintf(fptr,"\n\ttypes:\n\t\t channel Channel extends ned.DatarateChannel {\n\t\t\tdelay = 15ms;\n\t\t\tdatarate = 1Gbps;\n\t\t}\n");
+    fprintf(fptr,"\n\ttypes:\n\t\t channel Channel extends ned.DatarateChannel {\n\t\t\tdatarate = 1Gbps;\n\t\t}\n");
     fprintf(fptr,"\tsubmodules:\n\t\tNode[%d]: Nodes;\n", numNodes);
     fprintf(fptr,"\tconnections allowunconnected:\n");
     fprintf(fptr,"\t\tfor p=0..%d, for e=0..%d, for s=0..%d{\n", k-1, k/2-1, k/2-1);
@@ -87,8 +87,8 @@ int main(int argc, char* argv[]){
     fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + e)].in++ <-- Channel <-- Node[int(%d*p + %d*%d/4 + s)].out++;\n", numEachPod, k, k, numEachPod, k, k);
     fprintf(fptr,"\t\t}\n");
     fprintf(fptr,"\t\tfor p=0..%d, for e=0..%d, for s=0..%d{\n", k-1, k/2-1, k/2-1);
-    fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + %d/2 + e)].out++ --> Channel --> Node[int(e*%d/4 + s + %d)].in++;\n", numEachPod, k, k, k, k, numPodSwitches + numServers);
-    fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + %d/2 + e)].in++ <-- Channel <-- Node[int(e*%d/4 + s + %d)].out++;\n", numEachPod, k, k, k, k, numPodSwitches + numServers);
+    fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + %d/2 + e)].out++ --> Channel --> Node[int(e*%d/2 + s + %d)].in++;\n", numEachPod, k, k, k, k, numPodSwitches + numServers);
+    fprintf(fptr,"\t\t\tNode[int(%d*p + %d*%d/4 + %d/2 + e)].in++ <-- Channel <-- Node[int(e*%d/2 + s + %d)].out++;\n", numEachPod, k, k, k, k, numPodSwitches + numServers);
     fprintf(fptr,"\t\t}\n}");
     fclose(fptr);
     return 0;
