@@ -69,6 +69,7 @@ int main(int argc, char* argv[]){
             counter = 0;
             genRandomPairs.push_back(pair<int,int>(prehost, nexthost));
             fprintf(fptr, "\t\tNode[%d].type = 1;\n", prehost);
+            fprintf(fptr, "\t\tNode[%d].des = %d;\n", prehost, nexthost);
             fprintf(fptr, "\t\tNode[%d].type = 3;\n", nexthost);
         }
         prehost = nexthost;
