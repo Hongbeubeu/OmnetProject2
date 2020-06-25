@@ -19,7 +19,7 @@ int main(int argc, char* argv[]){
     int numCores = k*k/4;
     int numNodes = numServers + numSwitchs;
     int numEachPod = k * k / 4 + k;
-    fprintf(fptr,"simple Nodes\n{\n\tparameters:\n\t\t@display(\"i=device/pc\");\n\t\tint type;\n\t\tint des = default(-1);\n\t\tint EXB_SIZE;\n\t\tdouble TIMEOUT;\n\t\tdouble TIME_INTERVAL;\n\t\tdouble CHANNEL_DELAY;\n\t\tdouble CREDIT_DELAY;\n\t\tdouble TIME_GEN_MSG;\n\t\tdouble TIME_OPERATION_OF_SWITCH;\n\tgates:\n\t\tinput in[%d];\n\t\toutput out[%d];\n}\n\n",k,k);
+    fprintf(fptr,"simple Nodes\n{\n\tparameters:\n\t\t@display(\"i=device/pc\");\n\t\tint type;\n\t\tint des = default(-1);\n\t\tint k = %d\n\n\tint EXB_SIZE;\n\t\tdouble TIMEOUT;\n\t\tdouble TIME_INTERVAL;\n\t\tdouble CHANNEL_DELAY;\n\t\tdouble CREDIT_DELAY;\n\t\tdouble TIME_GEN_MSG;\n\t\tdouble TIME_OPERATION_OF_SWITCH;\n\tgates:\n\t\tinput in[%d];\n\t\toutput out[%d];\n}\n\n",k,k,k);
     fprintf(fptr,"network fattree\n{\n");
     fprintf(fptr, "\tparameters:\n");
 

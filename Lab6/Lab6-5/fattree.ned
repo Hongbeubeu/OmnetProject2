@@ -4,6 +4,7 @@ simple Nodes
 		@display("i=device/pc");
 		int type;
 		int des = default(-1);
+		int k = 4;
 		int EXB_SIZE;
 		double TIMEOUT;
 		double TIME_INTERVAL;

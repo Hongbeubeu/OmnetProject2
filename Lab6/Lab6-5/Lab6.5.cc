@@ -11,6 +11,7 @@ class Nodes: public cSimpleModule{
 private:
     int EXB_SIZE;
     int type;
+    int k;
     int BUFFER_COUNTER;
     int lastMessageId;
     int destination;
@@ -66,7 +67,7 @@ void Nodes::initialize(){
     type = par("type").intValue();
     isChannelBussy = false;
     if (type == 2){
-        int k = 4;
+        k = par("k").intValue();
         fatTreeGraph = FatTreeGraph(k);
         ftra = new FatTreeRoutingAlgorithm(fatTreeGraph, true);
         scheduleAt(0 + TIME_OPERATION_OF_SWITCH, new cMessage("send"));
@@ -97,7 +98,7 @@ void Nodes::handleMessage(cMessage *msg){
 void Nodes::senders(cMessage *msg){
     if(simTime() >= TIMEOUT)
         return;
-    //sendMsg *ttmsg = check_and_cast<sendMsg *>(msg);
+
     cModule *nextGate = gate("out", 0)->getNextGate()->getOwnerModule();
     EV << getIndex() <<"-" << nextGate->getFullPath() << endl;
     if(strcmp(msg->getName(), "generate") == 0){
@@ -166,7 +167,6 @@ void Nodes::switches(cMessage *msg){
      */
     if(strcmp(eventName, "sender to receiver") == 0){
         int index = msg->getSenderModule()->getIndex();
-        //ENB[index] = msg;
         if (ENB[index].empty()){
             queue<cMessage *> temp;
             temp.push(msg);
@@ -207,10 +207,10 @@ void Nodes::switches(cMessage *msg){
     }
 
     //Set channel status if send success message
-//    if(strcmp(eventName, "signal") == 0){
-//        isChannelBussy = false;
-//        delete msg;
-//    }
+    if(strcmp(eventName, "signal") == 0){
+        isChannelBussy = false;
+        delete msg;
+    }
 
     //Send message to receiver
 
@@ -227,7 +227,7 @@ void Nodes::switches(cMessage *msg){
 
 void Nodes::sendToExitBuffer_SW(){
 
-    for(int i = 0; i < 4 ; i++){
+    for(int i = 0; i < k; i++){
         cGate *g = gate("out", i);
         int index = g->getNextGate()->getOwnerModule()->getIndex();
         int id = numeric_limits<int>::max();
@@ -248,13 +248,23 @@ void Nodes::sendToExitBuffer_SW(){
         if(location > -1){
             cMessage *mess = ENB[location].front();
             EXB[index].push(mess);
+            sendSignalToNeighbor(location);
             sendMsg *ttmsg = check_and_cast<sendMsg *>(ENB[location].front());
             ENB[location].pop();
-            sendSignalToNeighbor(location);
         }
     }
 }
+void Nodes::sendSignalToNeighbor(int nodeIndex){
+    for (int i = 0; i < k; i++){
+        cGate *g = gate("out", i);
+        int index = g->getNextGate()->getOwnerModule()->getIndex();
+        if(index = nodeIndex){
+            send(new cMessage("signal"), "out", i);
+            break;
+        }
+    }
 
+}
 //void Nodes::Receivers(cMessage *msg){
 //    if (simTime() >= TIMEOUT){
 //        return;
