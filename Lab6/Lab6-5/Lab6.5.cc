@@ -26,7 +26,8 @@ private:
     FatTreeRoutingAlgorithm* ftra;
     FatTreeGraph fatTreeGraph;
     map<int, queue<cMessage *>> ENB, EXB;
-//    queue<cMessage *> ENB[4], EXB_SW[4]; // enchance buffer và exit buffer của switch
+    map<int, int> sizeOfNextENB; //lưu lại số buffer còn trống tại ENB tại Node kế tiếp
+    map<int, bool> channelStatus; //biến sử dụng để check xem đường truyền rảnh hay bận tại từng cổng
     queue<int> SQ, EXB_SD; //Source queue và exit buffer của sender
 
 
@@ -48,8 +49,9 @@ protected:
     //các hàm sử dụng cho switch
     void sendToExitBuffer_SW();
     bool checkENB();
-    void sendToNextNode();
+    void sendToNextNode(int);
     void sendSignalToNeighbor(int);
+    void sendSignalToIncBuff(int);
 
     //các hàm sử dụng cho receiver
     void sendSignalToSwitch();
@@ -70,6 +72,12 @@ void Nodes::initialize(){
         k = par("k").intValue();
         fatTreeGraph = FatTreeGraph(k);
         ftra = new FatTreeRoutingAlgorithm(fatTreeGraph, true);
+        for (int i = 0; i < k; i++){
+            cGate *g = gate("out", i);
+            int index = g->getNextGate()->getOwnerModule()->getIndex();
+            sizeOfNextENB[index] = EXB_SIZE;
+            channelStatus[index] = false;
+        }
         scheduleAt(0 + TIME_OPERATION_OF_SWITCH, new cMessage("send"));
         scheduleAt(0 + TIME_INTERVAL, new cMessage("nextPeriod"));
     }
@@ -101,28 +109,28 @@ void Nodes::senders(cMessage *msg){
 
     cModule *nextGate = gate("out", 0)->getNextGate()->getOwnerModule();
     EV << getIndex() <<"-" << nextGate->getFullPath() << endl;
-    if(strcmp(msg->getName(), "generate") == 0){
+    if(!strcmp(msg->getName(), "generate")){
         generateMessage();
         if(EXB_SD.size() < EXB_SIZE)
             sendToExitBuffer_SD();
         scheduleAt(simTime() + TIME_GEN_MSG, msg);
     }
 
-    //if(strcmp(msg->getName(), "send") == 0){
+    if(!strcmp(msg->getName(), "send")){
         if(BUFFER_COUNTER > 0 && EXB_SD.size() > 0){
             sendToSwitch();
             sendToExitBuffer_SD();
             --BUFFER_COUNTER;
         }
-        //scheduleAt(simTime() + CHANNEL_DELAY, msg);
-    //}
+        scheduleAt(simTime() + CHANNEL_DELAY, msg);
+    }
 
-    if(strcmp(msg->getName(), "signal") == 0){
+    if(!strcmp(msg->getName(), "inc buffer")){
         scheduleAt(simTime() + CREDIT_DELAY, new cMessage("incBuff"));
         delete msg;
     }
 
-    if(strcmp(msg->getName(), "incBuff") == 0){
+    if(!strcmp(msg->getName(), "incBuff")){
         ++BUFFER_COUNTER;
         delete msg;
     }
@@ -165,8 +173,9 @@ void Nodes::switches(cMessage *msg){
      * lưu các id vào ENB tương ứng
      * sinh sự kiện gửi gói tin từ ENB sang EXB sau 1 chu kỳ hoạt động của switch = chu kỳ sinh gói tin
      */
-    if(strcmp(eventName, "sender to receiver") == 0){
+    if(!strcmp(eventName, "sender to receiver")){
         int index = msg->getSenderModule()->getIndex();
+        sendSignalToNeighbor(index);
         if (ENB[index].empty()){
             queue<cMessage *> temp;
             temp.push(msg);
@@ -177,6 +186,7 @@ void Nodes::switches(cMessage *msg){
             temp.push(msg);
             ENB[index] = temp;
         }
+
 //        EV << index << " " << ENB[index].front()->getFullPath() << endl;
 //        sendMsg *ttmsg = check_and_cast<sendMsg *>(msg);
 //        int src = ttmsg->getSource();
@@ -200,33 +210,41 @@ void Nodes::switches(cMessage *msg){
     }
 
     //Kiểm tra gói tin muốn sang cổng EXB theo chu kỳ hoạt động của switch
-    if(strcmp(eventName, "nextPeriod")){
+    if(!strcmp(eventName, "nextPeriod")){
         if(EXB.size() < EXB_SIZE){
             sendToExitBuffer_SW();
         }
+        scheduleAt(simTime() + TIME_INTERVAL, msg);
     }
 
     //Set channel status if send success message
-    if(strcmp(eventName, "signal") == 0){
+    if(!strcmp(eventName, "signal")){
         isChannelBussy = false;
         delete msg;
     }
 
-    //Send message to receiver
+    if (!strcmp(eventName, "inc buffer")){
+        int index = msg->getSenderModule()->getIndex();
+        ++sizeOfNextENB[index];
+        delete msg;
+    }
 
-//    if(strcmp(eventName, "send") == 0){
-//        if(!EXB.empty()){
-//            if(!isChannelBussy){
-//                //sendToNextNode();
-//                isChannelBussy = true;
-//            }
-//        }
-//        scheduleAt(simTime() + TIME_INTERVAL, msg);
-//    }
+    //Send message to next node
+    if(!strcmp(eventName, "send")){
+        for(int i = 0; i < k; i++){
+            cGate *g = gate("out", i);
+            int index = g->getNextGate()->getOwnerModule()->getIndex();
+            if (!channelStatus[index]){
+                sendToNextNode(index);
+                channelStatus[index] = true;
+                break;
+            }
+        }
+    }
+    scheduleAt(simTime() + TIME_OPERATION_OF_SWITCH, msg);
 }
 
 void Nodes::sendToExitBuffer_SW(){
-
     for(int i = 0; i < k; i++){
         cGate *g = gate("out", i);
         int index = g->getNextGate()->getOwnerModule()->getIndex();
@@ -237,10 +255,11 @@ void Nodes::sendToExitBuffer_SW(){
             sendMsg *ttmsg = check_and_cast<sendMsg *>(temp.front());
             int payload = ttmsg->getPayload();
             if(ftra->next(ttmsg->getSource(), getIndex(), ttmsg->getDestination()) == index){
-                if ( payload < id){
+                if (payload < id){
                     id = payload;
                     location = it->first;
                 }
+            delete ttmsg;
             }
             //EV << ttmsg->getSource() << " -> " << ttmsg -> getDestination() << " : " << ttmsg->getPayload() << endl;
         }
@@ -248,22 +267,49 @@ void Nodes::sendToExitBuffer_SW(){
         if(location > -1){
             cMessage *mess = ENB[location].front();
             EXB[index].push(mess);
-            sendSignalToNeighbor(location);
-            sendMsg *ttmsg = check_and_cast<sendMsg *>(ENB[location].front());
+            sendSignalToIncBuff(location);
             ENB[location].pop();
         }
+        delete g;
     }
 }
+
 void Nodes::sendSignalToNeighbor(int nodeIndex){
+    for (int i = 0; i < k; i++){
+            cGate *g = gate("out", i);
+            int index = g->getNextGate()->getOwnerModule()->getIndex();
+            if(index = nodeIndex){
+                send(new cMessage("signal"), "out", i);
+                break;
+            }
+        }
+}
+
+void Nodes::sendSignalToIncBuff(int nodeIndex){
     for (int i = 0; i < k; i++){
         cGate *g = gate("out", i);
         int index = g->getNextGate()->getOwnerModule()->getIndex();
         if(index = nodeIndex){
-            send(new cMessage("signal"), "out", i);
+            send(new cMessage("inc buffer"), "out", i);
             break;
         }
     }
+}
 
+void Nodes::sendToNextNode(int nodeIndex){
+    for (int i = 0; i < k; i++){
+        cGate *g = gate("out", i);
+        int index = g->getNextGate()->getOwnerModule()->getIndex();
+        if(index = nodeIndex){
+            if (!EXB[index].empty()){
+                cMessage * mess = EXB[index].front();
+                EXB[index].pop();
+                send(mess, "out", i);
+                sizeOfNextENB[index]--;
+                break;
+            }
+        }
+    }
 }
 //void Nodes::Receivers(cMessage *msg){
 //    if (simTime() >= TIMEOUT){
