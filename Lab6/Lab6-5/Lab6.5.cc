@@ -1,6 +1,7 @@
 #include <omnetpp.h>
 #include <queue>
-#include <limits>
+//#include <limits>
+#include <fstream>
 #include "message_m.h"
 #include "FatTreeGraph.h"
 #include "FatTreeRoutingAlgorithm.h"
@@ -16,14 +17,15 @@ private:
     int lastMessageId;
     int destination;
     int sumMsg;
-    int counter = 0;
+    int *receivedMsgCount;
+    int intervalCount = 0;
     double TIMEOUT;
     double TIME_INTERVAL;
     double TIME_GEN_MSG;
     double CHANNEL_DELAY;
     double CREDIT_DELAY;
     double TIME_OPERATION_OF_SWITCH;
-    bool isChannelBussy;
+    int arrayLength;
 
     FatTreeRoutingAlgorithm* ftra;
     FatTreeGraph fatTreeGraph;
@@ -36,12 +38,12 @@ private:
 protected:
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
+    virtual void finish() override;
 
     //wrap function sử dụng cho từng loại thiết bị sender, switch, receiver
     void senders(cMessage *msg);
     void switches(cMessage *msg);
     void receivers(cMessage *msg);
-
 
     //các hàm sử dụng cho sender
     void generateMessage();
@@ -51,12 +53,12 @@ protected:
     //các hàm sử dụng cho switch
     void sendToExitBuffer_SW();
     bool checkENB();
-    void sendToNextNode(int);
-    void sendSignalToNeighbor(int);
+    void sendToNextNode();
+    //void sendSignalToNeighbor(int);
     void sendSignalToIncBuff(int);
 
     //các hàm sử dụng cho receiver
-    void sendSignalToSwitch();
+    void sendSignalToIncBuff_RC();
 };
 
 Define_Module(Nodes);
@@ -67,9 +69,9 @@ void Nodes::initialize(){
     TIME_INTERVAL = par("TIME_INTERVAL").doubleValue();
     CREDIT_DELAY = par("CREDIT_DELAY").doubleValue();
     TIME_GEN_MSG = par("TIME_GEN_MSG").doubleValue();
+    CHANNEL_DELAY = par("CHANNEL_DELAY").doubleValue();
     TIME_OPERATION_OF_SWITCH = par("TIME_OPERATION_OF_SWITCH").doubleValue();
     type = par("type").intValue();
-    isChannelBussy = false;
     if (type == 2){
         k = par("k").intValue();
         fatTreeGraph = FatTreeGraph(k);
@@ -81,40 +83,42 @@ void Nodes::initialize(){
             sizeOfNextENB[index] = EXB_SIZE;
             channelStatus[index] = false;
         }
-        scheduleAt(0 + TIME_INTERVAL, new cMessage("nextPeriod"));
-        scheduleAt(0 + TIME_OPERATION_OF_SWITCH, new cMessage("send"));
-
+        scheduleAt(0 + TIME_OPERATION_OF_SWITCH, new cMessage("nextPeriod"));
+        scheduleAt(0 + CHANNEL_DELAY, new cMessage("send"));
     }
     if (type == 1){
-        CHANNEL_DELAY = par("CHANNEL_DELAY").doubleValue();
         destination = par("des").intValue();
         BUFFER_COUNTER = EXB_SIZE;
         lastMessageId = -1;
         scheduleAt(0, new cMessage("generate"));
-        scheduleAt(0, new cMessage("send"));
+        scheduleAt(0 + CHANNEL_DELAY, new cMessage("send"));
     }
     if (type == 3){
         sumMsg = 0;
+        arrayLength = TIMEOUT / TIME_INTERVAL;
+        receivedMsgCount = new int[arrayLength];
+        memset(receivedMsgCount, 0, arrayLength * sizeof(int));
+        scheduleAt(0, new cMessage("nextInterval"));
     }
-
 }
 
 void Nodes::handleMessage(cMessage *msg){
     if(type == 1){
-        senders(msg);
+        senders(msg); // xử lý gói tin đến nút gửi
     }else if(type == 2){
-        switches(msg);
+        switches(msg); //xử lý gói tin đến switch
     }else if (type == 3){
-        receivers(msg);
+        receivers(msg); // xử lý gói tin đến nút đích
     }
 }
 
 void Nodes::senders(cMessage *msg){
-    if(simTime() >= TIMEOUT)
+    if(simTime() >= TIMEOUT){
+        delete msg;
         return;
+    }
 
-    //cModule *nextGate = gate("out", 0)->getNextGate()->getOwnerModule();
-    //EV << getIndex() <<"-" << nextGate->getFullPath() << endl;
+    //sinh gói tin định kỳ
     if(!strcmp(msg->getName(), "generate")){
         generateMessage();
         if(EXB_SD.size() < EXB_SIZE)
@@ -122,33 +126,35 @@ void Nodes::senders(cMessage *msg){
         scheduleAt(simTime() + TIME_GEN_MSG, msg);
     }
 
+    //gửi gói tin sang switch
     if(!strcmp(msg->getName(), "send")){
-        //EV << "EXB size: " << EXB_SD.size() << endl;
         if(BUFFER_COUNTER > 0 && EXB_SD.size() > 0){
             sendToSwitch();
             sendToExitBuffer_SD();
             --BUFFER_COUNTER;
         }
-
-        scheduleAt(simTime() + TIME_OPERATION_OF_SWITCH, msg);
+        scheduleAt(simTime() + CHANNEL_DELAY, msg);
     }
 
+    //tăng buffer của nút kế tiếp sau 1 khoảng thời gian CREDIT_DELAY
     if(!strcmp(msg->getName(), "inc buffer")){
         scheduleAt(simTime() + CREDIT_DELAY, new cMessage("incBuff"));
         delete msg;
     }
 
+    //tăng buffer
     if(!strcmp(msg->getName(), "incBuff")){
         ++BUFFER_COUNTER;
         delete msg;
     }
 }
 
+//Sinh gói tin
 void Nodes::generateMessage(){
     SQ.push(++lastMessageId);
-    EV << "generated message id = " << lastMessageId << endl;
 }
 
+//gửi gói tin tới exitbuffer
 void Nodes::sendToExitBuffer_SD(){
     if( !SQ.empty()){
         int msgId = SQ.front();
@@ -157,6 +163,7 @@ void Nodes::sendToExitBuffer_SD(){
     }
 }
 
+//gửi gói tin tới switch
 void Nodes::sendToSwitch(){
     int sendMsgId = EXB_SD.front();
     EXB_SD.pop();
@@ -167,112 +174,68 @@ void Nodes::sendToSwitch(){
     send(sMsg, "out", 0);
 }
 
-
+/**
+ * nhận gói tin mà các node gửi đến
+ * lưu message vào ENB tương ứng
+ * gửi thông báo đường truyền rảnh cho node trước
+ */
 void Nodes::switches(cMessage *msg){
     if(simTime() >= TIMEOUT){
+        delete msg;
         EV << "Time out" << endl;
         return;
     }
-//
-//    for(int i = 0; i < k; i++){
-//        cGate *g = gate("out", i);
-//        int index = g->getNextGate()->getOwnerModule()->getIndex();
-//        EV << g->getFullPath() << " : " << sizeOfNextENB[index] << endl;
-//    }
     const char * eventName = msg->getName();
-
-    /**
-     * nhận gói tin mà các node gửi đến
-     * lưu message vào ENB tương ứng
-     * gửi thông báo đường truyền rảnh cho node trước
-     */
+    //chuyển gói tin vào ENB tương ứng khi switch nhận được gói tin
     if(!strcmp(eventName, "sender to receiver")){
-        //counter++;
-        //cout << getFullName() << " : counter = " << counter << endl;
         int index = msg->getSenderModule()->getIndex();
-        EV << "sender: " << index << endl;
-        sendSignalToNeighbor(index);
         queue<cMessage *> temp;
         if (ENB[index].empty()){
             temp.push(msg);
             ENB[index] = temp;
-        }else{
+        } else {
             temp = ENB[index];
             temp.push(msg);
             ENB[index] = temp;
         }
     }
-
     //Kiểm tra gói tin muốn sang cổng EXB theo chu kỳ hoạt động của switch
     if(!strcmp(eventName, "nextPeriod")){
-        //EV << "nextPeriod " << ENB.size()  << endl;
         if(ENB.size() > 0){
             sendToExitBuffer_SW();
         }
-        scheduleAt(simTime() + TIME_INTERVAL, msg);
+        scheduleAt(simTime() + TIME_OPERATION_OF_SWITCH, msg);
     }
-
-    //Set channel status if send success message
-    if(!strcmp(eventName, "signal")){
-        int index = msg->getSenderModule()->getIndex();
-        channelStatus[index] = false;
+    //tăng buffer khi nhận được tín hiệu từ nút kề tương ứng sau khoảng thời gian CREDIT_DELAY
+    if (!strcmp(eventName, "inc buffer")){
+        cMessage *sendMsg = new cMessage("incbuff");
+        sendMsg->addPar("preNode");
+        sendMsg->par("preNode").setLongValue(msg->getSenderModule()->getIndex());
+        scheduleAt(simTime() + CREDIT_DELAY, sendMsg);
         delete msg;
     }
-
-    if (!strcmp(eventName, "inc buffer")){
-        int index = msg->getSenderModule()->getIndex();
-        //EV << "sizeOfNextENB " << index << " : " << sizeOfNextENB[index] << endl;
+    //tăng buffer
+    if (!strcmp(eventName, "incbuff")){
+        int index = msg->par("preNode").longValue();
         ++sizeOfNextENB[index];
         delete msg;
     }
-
-    //Send message to next node
+    //gửi gói tin tới nút kế tiếp
     if(!strcmp(eventName, "send")){
-        do{
-            int index = sendTo.front();
-            if(!channelStatus[index]){
-                if(sizeOfNextENB[index] > 0){
-                    sendToNextNode(index);
-                    sizeOfNextENB[index]--;
-                    channelStatus[index] = true;
-                    sendTo.pop();
-                    sendTo.push(index);
-                    break;
-                }
-            }
-            sendTo.pop();
-            sendTo.push(index);
-        }while(1);
-//        for(int i = 0; i < k; i++){
-//            cGate *g = gate("out", i);
-//            int index = g->getNextGate()->getOwnerModule()->getIndex();
-//            //EV << "ENB["<< index << "]" <<".size = " << ENB[index].size() << endl;
-//            //EV << "sizeOfNextENB[" << index << "] = " << sizeOfNextENB[index] << endl;
-//            if (!channelStatus[index]){
-//                if(sizeOfNextENB[index] > 0){
-//                    sendToNextNode(index);
-//                    sizeOfNextENB[index]--;
-//                    channelStatus[index] = true;
-//                    EV << "toang o day?" << endl;
-//                    //break;
-//                }
-//            }
-//        }
-        scheduleAt(simTime() + TIME_OPERATION_OF_SWITCH, msg);
+        sendToNextNode();
+        scheduleAt(simTime() + CHANNEL_DELAY, msg);
     }
-
 }
-
+//Tìm gói tin muốn chuyển sang exitbuffer
 void Nodes::sendToExitBuffer_SW(){
     sendMsg *ttmsg;
-    queue<cMessage *> temp, temp1;
+    queue<cMessage *> temp;
     cMessage *mess;
     for(int i = 0; i < k; i++){
         cGate *g = gate("out", i);
         int index = g->getNextGate()->getOwnerModule()->getIndex();
         int id = numeric_limits<int>::max();
         int location = -1;
-        //EV << "ENB["<< index << "].size = " << ENB[index].size() << endl;
         for(map<int, queue<cMessage *>>::iterator it = ENB.begin(); it != ENB.end(); it++){
             temp = it->second;
             if(!temp.empty()){
@@ -288,32 +251,15 @@ void Nodes::sendToExitBuffer_SW(){
         }
         if(location > -1){
            mess = ENB[location].front();
-           if(EXB[index].empty()){
-               temp1.push(mess);
-           } else {
-               temp1 = EXB[index];
-               if(EXB[index].size() < EXB_SIZE)
-                   temp1.push(mess);
+           if(EXB[index].size() < EXB_SIZE){
+               EXB[index].push(mess);
+               sendSignalToIncBuff(location);
+               ENB[location].pop();
            }
-           EXB[index] = temp1;
-           sendSignalToIncBuff(location);
-           ENB[location].pop();
         }
     }
 }
-
-void Nodes::sendSignalToNeighbor(int nodeIndex){
-    int index;
-    for (int i = 0; i < k; i++){
-        cGate *g = gate("out", i);
-        index = g->getNextGate()->getOwnerModule()->getIndex();
-        if(index == nodeIndex){
-            send(new cMessage("signal"), "out", i);
-            break;
-        }
-    }
-}
-
+//gửi tín hiệu tăng buffer cho nút tương ướng khi có gói tin ra khỏi ENB ứng với nút đó
 void Nodes::sendSignalToIncBuff(int nodeIndex){
     int index;
     for (int i = 0; i < k; i++){
@@ -325,109 +271,65 @@ void Nodes::sendSignalToIncBuff(int nodeIndex){
         }
     }
 }
-
-void Nodes::sendToNextNode(int nodeIndex){
-    //EV << "send to " << nodeIndex << endl;
-    cMessage * mess;
+//gửi gói tin sang nút tiếp theo
+void Nodes::sendToNextNode(){
     for (int i = 0; i < k; i++){
         cGate *g = gate("out", i);
-
         int index = g->getNextGate()->getOwnerModule()->getIndex();
-        //EV <<"index = " << index << endl;
-        //EV <<"nodeIndex = " << nodeIndex << endl;
-        if(index == nodeIndex){
-            //EV << EXB[index].empty() << endl;
+        if(sizeOfNextENB[index] > 0){
             if (!EXB[index].empty()){
-                mess = EXB[index].front();
-                EV << "index :" << index << endl;
-                EV << "Node Index : " << getIndex() << endl;
-                EV << "sender :" << mess->getSenderModule()->getIndex() << endl;
-                EV << "Owner" << mess->getOwner()->getFullPath() << endl;
-                cout << "Node[" << getIndex() << "].port out: " << i << " -> " << "node: " << index << endl;
+                sizeOfNextENB[index]--;
+                cMessage * mess = EXB[index].front()->dup();
                 send(mess, "out", i);
+                delete EXB[index].front();
                 EXB[index].pop();
-                //delete ttmsg;
-                break;
             }
-            break;
         }
     }
-    //delete mess;
 }
+//xử lý tin nhắn đến nút đích
 void Nodes::receivers(cMessage *msg){
     if (simTime() >= TIMEOUT){
+        delete msg;
         return;
     }
     const char * eventName = msg->getName();
     if(!strcmp(eventName, "sender to receiver")){
-        //sendSignalToSwitch();
-        EV << "Received msg" << endl;
+        sendSignalToIncBuff_RC();
         sumMsg++;
-        //receivedMsgCount[intervalCount]++;
+        receivedMsgCount[intervalCount]++;
         delete msg;
-        cout << getIndex() << ": " << sumMsg << endl;
+    }
+    if (!strcmp(msg->getName(), "nextInterval")) {
+        intervalCount++;
+        scheduleAt(simTime() + TIME_INTERVAL, msg);
+    }
+}
+
+void Nodes::sendSignalToIncBuff_RC(){
+    send(new cMessage("inc buffer"), "out", 0);
+}
+//tính toán số gói tin nhận được theo từng interval lưu vào file
+void Nodes::finish(){
+    if(type == 3){
+        fstream fileOutput, fileInput;
+        int preArr[arrayLength];
+        for (int i = 0; i < arrayLength; i++)
+            preArr[i] = 0;
+        fileInput.open(("E:/OmnetLab/Lab6/Lab6-5/output.txt"), ios::in);
+        if(fileInput){
+            int i = 0;
+            while (fileInput >> preArr[i])
+                i++;
+        }
+        fileInput.close();
+        fileOutput.open(("E:/OmnetLab/Lab6/Lab6-5/output.txt"), ios::out);
+        for (int i = 0; i < arrayLength; i++) {
+            fileOutput << receivedMsgCount[i] + preArr[i] << " ";
+        }
+        fileOutput << endl;
+        fileOutput.close();
+        cout << "Node " << getIndex() << " received : "  << sumMsg << " message." <<  endl;
     }
 
-
-//    if (strcmp(msg->getName(), "nextInterval") == 0) {
-//        intervalCount++;
-//        scheduleAt(simTime() + TIME_INTERVAL, msg);
-//    }
 }
-///**
-// * gửi thông báo ENB tương ứng có chỗ trống
-// * @input số hiệu cổng gửi signal
-// * @return không
-// */
-//
-//bool Nodes::checkENB(){
-//    for (int i = 0; i < 3; i++){
-//        if(!ENB[i].empty())
-//            return true;
-//    }
-//    return false;
-//}
-//
-//void Nodes::sendSignalToSender(int port){
-//    send(new cMessage("signal"), "out", port);
-//}
-//
-///**
-// * gửi gói tin từ ENB sang EXB
-// * @input không
-// * @return không
-// */
-//
-//void Nodes::sendToExitBuffer(){
-//    int id = numeric_limits<int>::max();
-//    int port = 0;
-//    for ( int i = 0; i < 3; i++){
-//        if (!ENB[i].empty()){
-//            if(ENB[i].front() < id){
-//                id = ENB[i].front();
-//                ENB[i].pop();
-//                port = i;
-//            }
-//        }
-//    }
-//    EXB.push(id);
-//    sendSignalToSender(port);
-//}
-//
-///**
-// * gửi gói tin đến receiver
-// * @return không
-// */
-//
-//void Nodes::sendToReceiver(){
-//    int sendMsgId = EXB.front();
-//    EXB.pop();
-//
-//    cMessage *sendMsg = new cMessage("sender to receiver msg");
-//
-//    cMsgPar *msgParam = new cMsgPar("msgId");
-//    msgParam->setLongValue(sendMsgId);
-//    sendMsg->addPar(msgParam);
-//
-//    send(sendMsg, "out", 3);
-//}
